@@ -88,6 +88,10 @@ def main():
     torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
     torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
 
+    print("\n================ GPU =================\n")
+    print("GPU count: ", torch.cuda.device_count())
+    print("GPU name: ", torch.cuda.get_device_name(0))
+    
     model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
         cfg, is_train=True
     )

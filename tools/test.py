@@ -12,6 +12,7 @@ from __future__ import print_function
 import argparse
 import os
 import pprint
+import numpy as np
 
 import torch
 import torch.nn.parallel
@@ -94,6 +95,23 @@ def main():
         )
         logger.info('=> loading model from {}'.format(model_state_file))
         model.load_state_dict(torch.load(model_state_file))
+    
+    # SAVE TORCH TRACE SCRIPT -------------------------------
+    # model.eval()
+
+    # input = torch.randn(1,3,256,256)
+    # trace_v = torch.jit.trace(model, input)
+    # trace_v.save("/home/inrol/Downloads/trace_MPIImodel.pt")
+    # # with torch.no_grad():
+    # #     torch.jit.save(trace_v, "/home/inrol/Downloads/trace_COCOmodel.pt")
+    # test_input = torch.ones(1,3,256,256)
+    # test_output = model(test_input)
+    # trace_output = trace_v(test_input)
+    # # print("Compare results:\n",)
+    # print("output shape: ", np.shape(test_output), np.shape(trace_output))
+    # print("model: ", test_output[0,5,35:40,30:35])
+    # print("trace: ", trace_output[0,5,35:40,30:35])
+    # --------------------------------------------------------
 
     model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
 
