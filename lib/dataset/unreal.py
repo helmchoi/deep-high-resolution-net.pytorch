@@ -132,7 +132,6 @@ class UNRLDataset(JointsDataset):
 
         jnt_count = np.sum(jnt_visible, axis=1)
 
-        # <-- for what?
         threshold = 0.5
         less_than_threshold = np.multiply((scaled_uv_err <= threshold),
                                           jnt_visible)

@@ -41,6 +41,7 @@ class JointsDataset(Dataset):
 
         self.scale_factor = cfg.DATASET.SCALE_FACTOR
         self.rotation_factor = cfg.DATASET.ROT_FACTOR
+        self.shift_factor = cfg.DATASET.SHIFT_FACTOR
         self.flip = cfg.DATASET.FLIP
         self.num_joints_half_body = cfg.DATASET.NUM_JOINTS_HALF_BODY
         self.prob_half_body = cfg.DATASET.PROB_HALF_BODY
@@ -141,6 +142,7 @@ class JointsDataset(Dataset):
         s = db_rec['scale']
         score = db_rec['score'] if 'score' in db_rec else 1
         r = 0
+        shift_ = np.array([0, 0], dtype=np.float32)
 
         if self.is_train:
             if (np.sum(joints_vis[:, 0]) > self.num_joints_half_body
@@ -163,8 +165,12 @@ class JointsDataset(Dataset):
                 joints, joints_vis = fliplr_joints(
                     joints, joints_vis, data_numpy.shape[1], self.flip_pairs)
                 c[0] = data_numpy.shape[1] - c[0] - 1
-
-        trans = get_affine_transform(c, s, r, self.image_size)
+        
+            # Random shifting
+            th_ = 2*np.pi * np.random.rand() - np.pi
+            shift_ = self.shift_factor * np.random.rand() * np.array([np.cos(th_), np.sin(th_)])
+            
+        trans = get_affine_transform(c, s, r, self.image_size, shift_)
         input = cv2.warpAffine(
             data_numpy,
             trans,
