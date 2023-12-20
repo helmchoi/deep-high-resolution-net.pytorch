@@ -101,7 +101,7 @@ def main():
 
     # input = torch.randn(1,3,256,256)
     # trace_v = torch.jit.trace(model, input)
-    # trace_v.save("/home/inrol/Downloads/trace_Unreal_v2_flip.pt")
+    # trace_v.save("/home/inrol/Downloads/trace_Unreal_v3_flip.pt")
     # # with torch.no_grad():
     # #     torch.jit.save(trace_v, "/home/inrol/Downloads/trace_Unreal.pt")
     # test_input = torch.ones(1,3,256,256)

@@ -12,3 +12,4 @@ from .mpii import MPIIDataset as mpii
 from .coco import COCODataset as coco
 from .test import TESTDataset as test
 from .unreal import UNRLDataset as unreal
+from .vist2 import VISTDataset as vist

@@ -17,7 +17,7 @@ DATASET:
   FLIP: true
   NUM_JOINTS_HALF_BODY: 8
   PROB_HALF_BODY: -1.0
-  ROOT: 'data/unreal/'
+  ROOT: '/data/local/HL/HRNet_data/unreal/'
   ROT_FACTOR: 30
   SCALE_FACTOR: 0.25
   SHIFT_FACTOR: 0.5
