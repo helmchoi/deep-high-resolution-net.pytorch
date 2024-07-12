@@ -15,18 +15,18 @@ DATASET:
   DATASET: vist
   DATA_FORMAT: png
   FLIP: false
-  NUM_JOINTS_HALF_BODY: 27
+  NUM_JOINTS_HALF_BODY: 8
   PROB_HALF_BODY: -1.0
-  ROOT: 'data/vist2/'
+  ROOT: 'data/240604_0702_mix/'
   ROT_FACTOR: 30
-  SCALE_FACTOR: 0.25
+  SCALE_FACTOR: 0.5
   SHIFT_FACTOR: 0.5
   TEST_SET: valid
   TRAIN_SET: train
 MODEL:
   INIT_WEIGHTS: true
   NAME: pose_hrnet
-  NUM_JOINTS: 54
+  NUM_JOINTS: 16
   PRETRAINED: 'models/pytorch/imagenet/hrnet_w32-36af842e.pth'
   TARGET_TYPE: gaussian
   IMAGE_SIZE:

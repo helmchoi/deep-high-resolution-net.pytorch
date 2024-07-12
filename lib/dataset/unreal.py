@@ -12,6 +12,7 @@ import logging
 import os
 import json_tricks as json
 from collections import OrderedDict
+from copy import deepcopy
 
 import numpy as np
 from scipy.io import loadmat, savemat
@@ -105,37 +106,53 @@ class UNRLDataset(JointsDataset):
         if 'test' in cfg.DATASET.TEST_SET:
             return {'Null': 0.0}, 0.0
 
-        gt_file = os.path.join(cfg.DATASET.ROOT,
-                               'annot',
-                               'gt_{}.mat'.format(cfg.DATASET.TEST_SET))
-        gt_dict = loadmat(gt_file)
-        # dataset_joints = gt_dict['dataset_joints']
-        jnt_missing = gt_dict['jnt_missing'].reshape((self.num_joints,-1))
-        pos_gt_src = gt_dict['pos_gt_src'].reshape((self.num_joints,2,-1))
-        # headboxes_src = gt_dict['headboxes_src']
-        bbox_src = gt_dict['bbox_src'].reshape((2,2,-1))
+        # gt_file = os.path.join(cfg.DATASET.ROOT,
+        #                        'annot',
+        #                        'gt_{}.mat'.format(cfg.DATASET.TEST_SET))
+        # gt_dict = loadmat(gt_file)
+        # jnt_missing = gt_dict['jnt_missing'].reshape((self.num_joints,-1))
+        # pos_gt_src = gt_dict['pos_gt_src'].reshape((self.num_joints,2,-1))
+        # bbox_src = gt_dict['bbox_src'].reshape((2,2,-1))
+
+        file_name = os.path.join(
+            self.root, 'annot', cfg.DATASET.TEST_SET + '.json'
+        )
+        with open(file_name) as anno_file:
+            anno = json.load(anno_file)
+
+        len_anno = len(anno)
+        jnt_visible = np.zeros((self.num_joints, len_anno))
+        pos_gt_src = np.zeros((self.num_joints, 2, len_anno))
+        scale = np.ones((self.num_joints, len_anno))
+        for idx, a in enumerate(anno):
+            jnt_visible[:, idx] = np.array(a['joints_vis'])
+            pos_gt_src[:, :, idx] = np.array(a['joints'])
+            scale[:, idx] = a['scale'] * 200.0 / 10.0
 
         pos_pred_src = np.transpose(preds, [1, 2, 0])
 
-        jnt_visible = 1 - jnt_missing
+        # jnt_visible = 1 - jnt_missing
         uv_error = pos_pred_src - pos_gt_src
         uv_err = np.linalg.norm(uv_error, axis=1)
 
-        SC_BIAS = 0.6
-        bboxsize = bbox_src[1, :, :] - bbox_src[0, :, :]
-        bboxsize = np.linalg.norm(bboxsize, axis=0)
-        bboxsize *= SC_BIAS
+        # SC_BIAS = 0.6
+        # bboxsize = bbox_src[1, :, :] - bbox_src[0, :, :]
+        # bboxsize = np.linalg.norm(bboxsize, axis=0)
+        # bboxsize *= SC_BIAS
 
-        scale = np.multiply(bboxsize, np.ones((len(uv_err), 1)))
+        # scale = np.multiply(bboxsize, np.ones((len(uv_err), 1)))
         scaled_uv_err = np.divide(uv_err, scale)
         scaled_uv_err = np.multiply(scaled_uv_err, jnt_visible)
 
         jnt_count = np.sum(jnt_visible, axis=1)
 
+        # <-- for what?
         threshold = 0.5
         less_than_threshold = np.multiply((scaled_uv_err <= threshold),
                                           jnt_visible)
-        PCKh = np.divide(100.*np.sum(less_than_threshold, axis=1), jnt_count)
+        jnt_count_ = deepcopy(jnt_count)
+        jnt_count_[jnt_count == 0] = 1
+        PCKh = np.divide(100.*np.sum(less_than_threshold, axis=1), jnt_count_)
 
         # save
         rng = np.arange(0, 0.5+0.01, 0.01)
@@ -146,13 +163,13 @@ class UNRLDataset(JointsDataset):
             less_than_threshold = np.multiply(scaled_uv_err <= threshold,
                                               jnt_visible)
             pckAll[r, :] = np.divide(100.*np.sum(less_than_threshold, axis=1),
-                                     jnt_count)
+                                     jnt_count_)
 
         PCKh = np.ma.array(PCKh, mask=False)
-        # PCKh.mask[6:8] = True     # <-- for what?
+        # PCKh.mask[6:8] = True
 
         jnt_count = np.ma.array(jnt_count, mask=False)
-        # jnt_count.mask[6:8] = True    # <-- for what?
+        # jnt_count.mask[6:8] = True
         jnt_ratio = jnt_count / np.sum(jnt_count).astype(np.float64)
 
         name_value = [

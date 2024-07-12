@@ -244,6 +244,8 @@ class JointsDataset(Dataset):
         '''
         target_weight = np.ones((self.num_joints, 1), dtype=np.float32)
         target_weight[:, 0] = joints_vis[:, 0]
+        # # [23.12.20] for invisible joints, supervise w/ uniform low prob.
+        # target_weight[:, 0] = np.maximum(joints_vis[:, 0], 0.4)
 
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
