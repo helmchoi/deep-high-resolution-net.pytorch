@@ -1,7 +1,6 @@
 # ------------------------------------------------------------------------------
-# pose.pytorch
-# Copyright (c) 2018-present Microsoft
-# Licensed under The Apache-2.0 License [see LICENSE for details]
+# Copyright (c) Microsoft
+# Licensed under the MIT License.
 # Written by Bin Xiao (Bin.Xiao@microsoft.com)
 # ------------------------------------------------------------------------------
 
@@ -12,7 +11,7 @@ from __future__ import print_function
 import argparse
 import os
 import pprint
-import numpy as np
+import shutil
 
 import torch
 import torch.nn.parallel
@@ -21,13 +20,18 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
+from tensorboardX import SummaryWriter
 
 import _init_paths
 from config import cfg
 from config import update_config
 from core.loss import JointsMSELoss
+from core.function import train
 from core.function import validate
+from utils.utils import get_optimizer
+from utils.utils import save_checkpoint
 from utils.utils import create_logger
+from utils.utils import get_model_summary
 
 import dataset
 import models
@@ -46,6 +50,7 @@ def parse_args():
                         default=None,
                         nargs=argparse.REMAINDER)
 
+    # philly
     parser.add_argument('--modelDir',
                         help='model directory',
                         type=str,
@@ -64,6 +69,7 @@ def parse_args():
                         default='')
 
     args = parser.parse_args()
+
     return args
 
 
@@ -72,7 +78,7 @@ def main():
     update_config(cfg, args)
 
     logger, final_output_dir, tb_log_dir = create_logger(
-        cfg, args.cfg, 'valid')
+        cfg, args.cfg, 'train')
 
     logger.info(pprint.pformat(args))
     logger.info(cfg)
@@ -82,36 +88,33 @@ def main():
     torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
     torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
 
+    print("\n================ GPU =================\n")
+    print("GPU count: ", torch.cuda.device_count())
+    print("GPU name: ", torch.cuda.get_device_name(0))
+    
     model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
-        cfg, is_train=False
+        cfg, is_train=True
     )
 
-    if cfg.TEST.MODEL_FILE:
-        logger.info('=> loading model from {}'.format(cfg.TEST.MODEL_FILE))
-        model.load_state_dict(torch.load(cfg.TEST.MODEL_FILE), strict=False)
-    else:
-        model_state_file = os.path.join(
-            final_output_dir, 'final_state.pth'
-        )
-        logger.info('=> loading model from {}'.format(model_state_file))
-        model.load_state_dict(torch.load(model_state_file))
-    
-    # SAVE TORCH TRACE SCRIPT -------------------------------
-    model.eval()
+    # copy model file
+    this_dir = os.path.dirname(__file__)
+    shutil.copy2(
+        os.path.join(this_dir, '../lib/models', cfg.MODEL.NAME + '.py'),
+        final_output_dir)
+    # logger.info(pprint.pformat(model))
 
-    input = torch.randn(1,3,256,256)
-    trace_v = torch.jit.trace(model, input)
-    trace_v.save("output/unreal/pose_hrnet/w32_256x256_adam_lr1e-3_UnrealFinetune/240604_0807_unreal.pt")
-    # with torch.no_grad():
-    #     torch.jit.save(trace_v, "/home/inrol/Downloads/trace_Unreal.pt")
-    test_input = torch.ones(1,3,256,256)
-    test_output = model(test_input)
-    trace_output = trace_v(test_input)
-    # print("Compare results:\n",)
-    print("output shape: ", np.shape(test_output), np.shape(trace_output))
-    print("model: ", test_output[0,5,35:40,30:35])
-    print("trace: ", trace_output[0,5,35:40,30:35])
-    # --------------------------------------------------------
+    writer_dict = {
+        'writer': SummaryWriter(log_dir=tb_log_dir),
+        'train_global_steps': 0,
+        'valid_global_steps': 0,
+    }
+
+    dump_input = torch.rand(
+        (1, 3, cfg.MODEL.IMAGE_SIZE[1], cfg.MODEL.IMAGE_SIZE[0])
+    )
+    # writer_dict['writer'].add_graph(model, (dump_input, ))    # this is disabled because of error it causes [23.09.18]
+
+    logger.info(get_model_summary(model, dump_input))
 
     model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
 
@@ -124,6 +127,13 @@ def main():
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
     )
+    train_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
+        cfg, cfg.DATASET.ROOT, cfg.DATASET.TRAIN_SET, True,
+        transforms.Compose([
+            transforms.ToTensor(),
+            normalize,
+        ])
+    )
     valid_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
         cfg, cfg.DATASET.ROOT, cfg.DATASET.TEST_SET, False,
         transforms.Compose([
@@ -131,17 +141,57 @@ def main():
             normalize,
         ])
     )
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=cfg.TRAIN.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
+        shuffle=cfg.TRAIN.SHUFFLE,
+        num_workers=cfg.WORKERS,
+        pin_memory=cfg.PIN_MEMORY
+    )
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset,
         batch_size=cfg.TEST.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
         shuffle=False,
         num_workers=cfg.WORKERS,
-        pin_memory=True
+        pin_memory=cfg.PIN_MEMORY
     )
 
-    # evaluate on validation set
-    validate(cfg, valid_loader, valid_dataset, model, criterion,
-             final_output_dir, tb_log_dir)
+    best_perf = 0.0
+    best_model = False
+    last_epoch = -1
+    optimizer = get_optimizer(cfg, model)
+    begin_epoch = cfg.TRAIN.BEGIN_EPOCH
+    checkpoint_file = os.path.join(
+        final_output_dir, 'checkpoint.pth'
+    )
+
+    if cfg.AUTO_RESUME and os.path.exists(checkpoint_file):
+        logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
+        checkpoint = torch.load(checkpoint_file)
+        begin_epoch = checkpoint['epoch']
+        best_perf = checkpoint['perf']
+        last_epoch = checkpoint['epoch']
+        model.load_state_dict(checkpoint['state_dict'])
+
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        logger.info("=> loaded checkpoint '{}' (epoch {})".format(
+            checkpoint_file, checkpoint['epoch']))
+
+    print("\n=============\n\t named parameters")
+    for name, param in model.named_parameters():
+        print("\t\t name: ", name)
+        if name.count("module.conv") or name.count("module.bn"):
+            print("\t\t\t\t -----> first layer")
+        if name.count("module.final"):
+            print("\t\t\t\t -----> final layer")
+    print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
+    for name, param in model.named_parameters():
+        if name.count("module.final"):
+            param.requires_grad = False
+        elif name.count("module.stage4"):
+            param.requires_grad = False
+    print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 
 if __name__ == '__main__':

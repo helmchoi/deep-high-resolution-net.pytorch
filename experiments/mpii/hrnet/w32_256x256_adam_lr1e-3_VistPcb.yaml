@@ -17,7 +17,7 @@ DATASET:
   FLIP: false
   NUM_JOINTS_HALF_BODY: 8
   PROB_HALF_BODY: -1.0
-  ROOT: 'data/240604_0702_mix/'
+  ROOT: 'data/240604_08_simplemask/'
   ROT_FACTOR: 30
   SCALE_FACTOR: 0.5
   SHIFT_FACTOR: 0.5

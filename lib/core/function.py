@@ -34,6 +34,28 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
     # switch to train mode
     model.train()
 
+    # # [24.07.19] train only the final layer; freeze the rest
+    # for name, param in model.named_parameters():
+    #     param.requires_grad = False
+    #     if name.count("module.conv") or name.count("module.bn"):
+    #         param.requires_grad = True
+    #     # if name.count("module.final"):
+    #     #     param.requires_grad = True
+    #     elif name.count("module.stage4"):
+    #         param.requires_grad = True
+    #     elif name.count("module.transition3"):
+    #         param.requires_grad = True
+    #     elif name.count("module.stage3"):
+    #         param.requires_grad = True
+    #     elif name.count("module.transition2"):
+    #         param.requires_grad = True
+    #     elif name.count("module.stage2"):
+    #         param.requires_grad = True
+    #     elif name.count("module.transition1"):
+    #         param.requires_grad = True
+    #     elif name.count("module.layer1"):
+    #         param.requires_grad = True
+
     end = time.time()
     for i, (input, target, target_weight, meta) in enumerate(train_loader):
         # measure data loading time
