@@ -35,6 +35,7 @@ from utils.utils import get_model_summary
 
 import dataset
 import models
+import time
 
 
 def parse_args():
@@ -77,121 +78,142 @@ def main():
     args = parse_args()
     update_config(cfg, args)
 
-    logger, final_output_dir, tb_log_dir = create_logger(
-        cfg, args.cfg, 'train')
+    # logger, final_output_dir, tb_log_dir = create_logger(
+    #     cfg, args.cfg, 'train')
 
-    logger.info(pprint.pformat(args))
-    logger.info(cfg)
+    # logger.info(pprint.pformat(args))
+    # logger.info(cfg)
 
-    # cudnn related setting
-    cudnn.benchmark = cfg.CUDNN.BENCHMARK
-    torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
-    torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
+    # # cudnn related setting
+    # cudnn.benchmark = cfg.CUDNN.BENCHMARK
+    # torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
+    # torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
 
     print("\n================ GPU =================\n")
     print("GPU count: ", torch.cuda.device_count())
     print("GPU name: ", torch.cuda.get_device_name(0))
-    
+
+    device = torch.device("cuda")
+
+    model = models.create_model('faster_vit_4_21k_224', 
+                                pretrained=True,
+                                heatmap_sizes=(96,96),
+                                model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar")
+    image = torch.ones(1, 3, 224, 224).cuda()
+    model.to(device)
+    for i in range(5):
+        output = model(image)
+    t0 = time.time()
+    output = model(image)
+    print("[FasterViT] ", time.time() - t0, " [s]")
+
     model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
         cfg, is_train=True
     )
+    image = torch.rand(1, 3, 256, 256).cuda()
+    model.to(device)
+    for i in range(5):
+        output = model(image)
+    t0 = time.time()
+    output = model(image)
+    print("[HRNet] ", time.time() - t0, " [s]")
 
-    # copy model file
-    this_dir = os.path.dirname(__file__)
-    shutil.copy2(
-        os.path.join(this_dir, '../lib/models', cfg.MODEL.NAME + '.py'),
-        final_output_dir)
-    # logger.info(pprint.pformat(model))
+    # # copy model file
+    # this_dir = os.path.dirname(__file__)
+    # shutil.copy2(
+    #     os.path.join(this_dir, '../lib/models', cfg.MODEL.NAME + '.py'),
+    #     final_output_dir)
+    # # logger.info(pprint.pformat(model))
 
-    writer_dict = {
-        'writer': SummaryWriter(log_dir=tb_log_dir),
-        'train_global_steps': 0,
-        'valid_global_steps': 0,
-    }
+    # writer_dict = {
+    #     'writer': SummaryWriter(log_dir=tb_log_dir),
+    #     'train_global_steps': 0,
+    #     'valid_global_steps': 0,
+    # }
 
-    dump_input = torch.rand(
-        (1, 3, cfg.MODEL.IMAGE_SIZE[1], cfg.MODEL.IMAGE_SIZE[0])
-    )
-    # writer_dict['writer'].add_graph(model, (dump_input, ))    # this is disabled because of error it causes [23.09.18]
+    # dump_input = torch.rand(
+    #     (1, 3, cfg.MODEL.IMAGE_SIZE[1], cfg.MODEL.IMAGE_SIZE[0])
+    # )
+    # # writer_dict['writer'].add_graph(model, (dump_input, ))    # this is disabled because of error it causes [23.09.18]
 
-    logger.info(get_model_summary(model, dump_input))
+    # logger.info(get_model_summary(model, dump_input))
 
-    model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
+    # model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
 
-    # define loss function (criterion) and optimizer
-    criterion = JointsMSELoss(
-        use_target_weight=cfg.LOSS.USE_TARGET_WEIGHT
-    ).cuda()
+    # # define loss function (criterion) and optimizer
+    # criterion = JointsMSELoss(
+    #     use_target_weight=cfg.LOSS.USE_TARGET_WEIGHT
+    # ).cuda()
 
-    # Data loading code
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-    )
-    train_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
-        cfg, cfg.DATASET.ROOT, cfg.DATASET.TRAIN_SET, True,
-        transforms.Compose([
-            transforms.ToTensor(),
-            normalize,
-        ])
-    )
-    valid_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
-        cfg, cfg.DATASET.ROOT, cfg.DATASET.TEST_SET, False,
-        transforms.Compose([
-            transforms.ToTensor(),
-            normalize,
-        ])
-    )
+    # # Data loading code
+    # normalize = transforms.Normalize(
+    #     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    # )
+    # train_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
+    #     cfg, cfg.DATASET.ROOT, cfg.DATASET.TRAIN_SET, True,
+    #     transforms.Compose([
+    #         transforms.ToTensor(),
+    #         normalize,
+    #     ])
+    # )
+    # valid_dataset = eval('dataset.'+cfg.DATASET.DATASET)(
+    #     cfg, cfg.DATASET.ROOT, cfg.DATASET.TEST_SET, False,
+    #     transforms.Compose([
+    #         transforms.ToTensor(),
+    #         normalize,
+    #     ])
+    # )
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=cfg.TRAIN.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
-        shuffle=cfg.TRAIN.SHUFFLE,
-        num_workers=cfg.WORKERS,
-        pin_memory=cfg.PIN_MEMORY
-    )
-    valid_loader = torch.utils.data.DataLoader(
-        valid_dataset,
-        batch_size=cfg.TEST.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
-        shuffle=False,
-        num_workers=cfg.WORKERS,
-        pin_memory=cfg.PIN_MEMORY
-    )
+    # train_loader = torch.utils.data.DataLoader(
+    #     train_dataset,
+    #     batch_size=cfg.TRAIN.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
+    #     shuffle=cfg.TRAIN.SHUFFLE,
+    #     num_workers=cfg.WORKERS,
+    #     pin_memory=cfg.PIN_MEMORY
+    # )
+    # valid_loader = torch.utils.data.DataLoader(
+    #     valid_dataset,
+    #     batch_size=cfg.TEST.BATCH_SIZE_PER_GPU*len(cfg.GPUS),
+    #     shuffle=False,
+    #     num_workers=cfg.WORKERS,
+    #     pin_memory=cfg.PIN_MEMORY
+    # )
 
-    best_perf = 0.0
-    best_model = False
-    last_epoch = -1
-    optimizer = get_optimizer(cfg, model)
-    begin_epoch = cfg.TRAIN.BEGIN_EPOCH
-    checkpoint_file = os.path.join(
-        final_output_dir, 'checkpoint.pth'
-    )
+    # best_perf = 0.0
+    # best_model = False
+    # last_epoch = -1
+    # optimizer = get_optimizer(cfg, model)
+    # begin_epoch = cfg.TRAIN.BEGIN_EPOCH
+    # checkpoint_file = os.path.join(
+    #     final_output_dir, 'checkpoint.pth'
+    # )
 
-    if cfg.AUTO_RESUME and os.path.exists(checkpoint_file):
-        logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
-        checkpoint = torch.load(checkpoint_file)
-        begin_epoch = checkpoint['epoch']
-        best_perf = checkpoint['perf']
-        last_epoch = checkpoint['epoch']
-        model.load_state_dict(checkpoint['state_dict'])
+    # if cfg.AUTO_RESUME and os.path.exists(checkpoint_file):
+    #     logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
+    #     checkpoint = torch.load(checkpoint_file)
+    #     begin_epoch = checkpoint['epoch']
+    #     best_perf = checkpoint['perf']
+    #     last_epoch = checkpoint['epoch']
+    #     model.load_state_dict(checkpoint['state_dict'])
 
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        logger.info("=> loaded checkpoint '{}' (epoch {})".format(
-            checkpoint_file, checkpoint['epoch']))
+    #     optimizer.load_state_dict(checkpoint['optimizer'])
+    #     logger.info("=> loaded checkpoint '{}' (epoch {})".format(
+    #         checkpoint_file, checkpoint['epoch']))
 
-    print("\n=============\n\t named parameters")
-    for name, param in model.named_parameters():
-        print("\t\t name: ", name)
-        if name.count("module.conv") or name.count("module.bn"):
-            print("\t\t\t\t -----> first layer")
-        if name.count("module.final"):
-            print("\t\t\t\t -----> final layer")
-    print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
-    for name, param in model.named_parameters():
-        if name.count("module.final"):
-            param.requires_grad = False
-        elif name.count("module.stage4"):
-            param.requires_grad = False
-    print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
+    # print("\n=============\n\t named parameters")
+    # for name, param in model.named_parameters():
+    #     print("\t\t name: ", name)
+    #     if name.count("module.conv") or name.count("module.bn"):
+    #         print("\t\t\t\t -----> first layer")
+    #     if name.count("module.final"):
+    #         print("\t\t\t\t -----> final layer")
+    # print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
+    # for name, param in model.named_parameters():
+    #     if name.count("module.final"):
+    #         param.requires_grad = False
+    #     elif name.count("module.stage4"):
+    #         param.requires_grad = False
+    # print("\t trainable parameters cnt: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 
 if __name__ == '__main__':

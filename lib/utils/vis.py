@@ -47,6 +47,7 @@ def save_batch_image_with_joints(batch_image, batch_joints, batch_joints_vis,
                 joint[1] = y * height + padding + joint[1]
                 if joint_vis[0]:
                     cv2.circle(ndarr, (int(joint[0]), int(joint[1])), 2, [255, 0, 0], 2)
+                    # cv2.circle(ndarr, (int(joint[0]), int(joint[1])), 2, [255*float(joint[2]), 255, 255], 2)
             k = k + 1
     cv2.imwrite(file_name, ndarr)
 
@@ -75,7 +76,8 @@ def save_batch_heatmaps(batch_image, batch_heatmaps, file_name,
                            3),
                           dtype=np.uint8)
 
-    preds, maxvals = get_max_preds(batch_heatmaps.detach().cpu().numpy())
+    preds, maxvals = get_max_preds(batch_heatmaps.detach().cpu().numpy()[:,:,:-1])
+    # preds_depth, _ = get_max_preds(batch_heatmaps.detach().cpu().numpy()[:,:,-1:])
 
     for i in range(batch_size):
         image = batch_image[i].mul(255)\
@@ -97,12 +99,18 @@ def save_batch_heatmaps(batch_image, batch_heatmaps, file_name,
             cv2.circle(resized_image,
                        (int(preds[i][j][0]), int(preds[i][j][1])),
                        1, [0, 0, 255], 1)
+            # cv2.circle(resized_image,
+            #            (int(preds[i][j][0]), int(preds[i][j][1])),
+            #            1, [255, 255, 255*preds_depth[i][j][0]/heatmap_width], 1)
             heatmap = heatmaps[j, :, :]
             colored_heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
             masked_image = colored_heatmap*0.7 + resized_image*0.3
             cv2.circle(masked_image,
                        (int(preds[i][j][0]), int(preds[i][j][1])),
                        1, [0, 0, 255], 1)
+            # cv2.circle(masked_image,
+            #            (int(preds[i][j][0]), int(preds[i][j][1])),
+            #            1, [255, 255, 255*preds_depth[i][j][0]/heatmap_width], 1)
 
             width_begin = heatmap_width * (j+1)
             width_end = heatmap_width * (j+2)
@@ -128,7 +136,8 @@ def save_debug_images(config, input, meta, target, joints_pred, output,
         )
     if config.DEBUG.SAVE_BATCH_IMAGES_PRED:
         save_batch_image_with_joints(
-            input, joints_pred, meta['joints_vis'],
+            input, joints_pred * config.MODEL.IMAGE_SIZE[0] / config.MODEL.HEATMAP_SIZE[0], 
+            meta['joints_vis'],
             '{}_pred.jpg'.format(prefix)
         )
     if config.DEBUG.SAVE_HEATMAPS_GT:

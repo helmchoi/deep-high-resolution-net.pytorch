@@ -15,7 +15,7 @@ import os
 import numpy as np
 import torch
 
-from core.evaluate import accuracy
+from core.evaluate import accuracy, accuracy_depth
 from core.inference import get_final_preds
 from utils.transforms import flip_back
 from utils.vis import save_debug_images
@@ -87,6 +87,8 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
 
         _, avg_acc, cnt, pred = accuracy(output.detach().cpu().numpy(),
                                          target.detach().cpu().numpy())
+        # _, avg_acc, cnt, pred = accuracy_depth(output.detach().cpu().numpy(),
+        #                                  target.detach().cpu().numpy())
         acc.update(avg_acc, cnt)
 
         # measure elapsed time
@@ -112,8 +114,10 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
             writer_dict['train_global_steps'] = global_steps + 1
 
             prefix = '{}_{}'.format(os.path.join(output_dir, 'train'), i)
-            save_debug_images(config, input, meta, target, pred*4, output,
+            save_debug_images(config, input, meta, target, pred, output,
                               prefix)
+            # save_debug_images(config, input, meta, target, pred*np.array([4,4,1]), output,
+            #                   prefix)
 
 
 def validate(config, val_loader, val_dataset, model, criterion, output_dir,
@@ -176,6 +180,8 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
             losses.update(loss.item(), num_images)
             _, avg_acc, cnt, pred = accuracy(output.cpu().numpy(),
                                              target.cpu().numpy())
+            # _, avg_acc, cnt, pred = accuracy_depth(output.cpu().numpy(),
+            #                                  target.cpu().numpy())
 
             acc.update(avg_acc, cnt)
 
@@ -213,8 +219,10 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
                 prefix = '{}_{}'.format(
                     os.path.join(output_dir, 'val'), i
                 )
-                save_debug_images(config, input, meta, target, pred*4, output,
+                save_debug_images(config, input, meta, target, pred, output,
                                   prefix)
+                # save_debug_images(config, input, meta, target, pred*np.array([4,4,1]), output,
+                #                   prefix)
 
         name_values, perf_indicator = val_dataset.evaluate(
             config, all_preds, output_dir, all_boxes, image_path,

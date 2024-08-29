@@ -25,7 +25,7 @@ from utils.transforms import fliplr_joints
 logger = logging.getLogger(__name__)
 
 
-class JointsDataset(Dataset):
+class JointDepthsDataset(Dataset):
     def __init__(self, cfg, root, image_set, is_train, transform=None):
         self.num_joints = 0
         self.pixel_std = 200
@@ -51,6 +51,8 @@ class JointsDataset(Dataset):
         self.image_size = np.array(cfg.MODEL.IMAGE_SIZE)
         self.heatmap_size = np.array(cfg.MODEL.HEATMAP_SIZE)
         self.sigma = cfg.MODEL.SIGMA
+        self.depth_range = cfg.MODEL.DEPTH_RANGE
+        self.sigma_depth = cfg.MODEL.SIGMA_DEPTH
         self.use_different_joints_weight = cfg.LOSS.USE_DIFFERENT_JOINTS_WEIGHT
         self.joints_weight = 1
 
@@ -243,9 +245,9 @@ class JointsDataset(Dataset):
         :return: target, target_weight(1: visible, 0: invisible)
         '''
         target_weight = np.ones((self.num_joints, 1), dtype=np.float32)
-        # target_weight[:, 0] = joints_vis[:, 0]
-        # [23.12.20] for invisible joints, supervise w/ uniform low prob.
-        target_weight[:, 0] = np.maximum(joints_vis[:, 0], 0.4)
+        target_weight[:, 0] = joints_vis[:, 0]
+        # # [23.12.20] for invisible joints, supervise w/ uniform low prob.
+        # target_weight[:, 0] = np.maximum(joints_vis[:, 0], 0.4)
 
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
@@ -253,12 +255,14 @@ class JointsDataset(Dataset):
         if self.target_type == 'gaussian':
             target = np.zeros((self.num_joints,
                                self.heatmap_size[1],
-                               self.heatmap_size[0]),
+                               self.heatmap_size[0]+1),
                               dtype=np.float32)
 
             tmp_size = self.sigma * 3
+            tmp_size_depth = self.sigma_depth * 3
 
             for joint_id in range(self.num_joints):
+                # 2D jnt ----------------------------------------------------------
                 feat_stride = self.image_size / self.heatmap_size
                 mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)
                 mu_y = int(joints[joint_id][1] / feat_stride[1] + 0.5)
@@ -267,10 +271,8 @@ class JointsDataset(Dataset):
                 br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
                 if ul[0] >= self.heatmap_size[0] or ul[1] >= self.heatmap_size[1] \
                         or br[0] < 0 or br[1] < 0:
-                    # # If not, just return the image as is
-                    # target_weight[joint_id] = 0
-                    # [23.12.20] for invisible joints, supervise w/ uniform zero prob.
-                    target_weight[joint_id] = 0.4
+                    # If not, just return the image as is
+                    target_weight[joint_id] = 0
                     continue
 
                 # # Generate gaussian
@@ -292,6 +294,33 @@ class JointsDataset(Dataset):
                 if v > 0.5:
                     target[joint_id][img_y[0]:img_y[1], img_x[0]:img_x[1]] = \
                         g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
+
+                # Depth ------------------------------------------------------------
+                depth_scale = self.depth_range / self.heatmap_size[0]
+                mu_x = int(joints[joint_id][2] / depth_scale + 0.5)
+                # Check that any part of the gaussian is in-bounds
+                lim_ = [int(mu_x - tmp_size_depth), int(mu_x + tmp_size_depth + 1)]
+                if lim_[0] >= self.heatmap_size[0] or lim_[1] < 0:
+                    # If not, just return the image as is
+                    target_weight[joint_id] = 0
+                    continue
+
+                # # Generate gaussian
+                size = 2 * tmp_size_depth + 1
+                x = np.arange(0, size, 1, np.float32)
+                x0 = size // 2
+                # The gaussian is not normalized, we want the center value to equal 1
+                g_depth = np.exp(- ((x - x0) ** 2) / (2 * self.sigma_depth ** 2))
+
+                # Usable gaussian range
+                g_x = max(0, -lim_[0]), min(lim_[1], self.heatmap_size[0]) - lim_[0]
+                # Image range
+                img_x = max(0, lim_[0]), min(lim_[1], self.heatmap_size[0])
+
+                v = target_weight[joint_id]
+                if v > 0.5:
+                    target[joint_id][img_x[0]:img_x[1], self.heatmap_size[0]] = \
+                        g_depth[g_x[0]:g_x[1]]
 
         if self.use_different_joints_weight:
             target_weight = np.multiply(target_weight, self.joints_weight)

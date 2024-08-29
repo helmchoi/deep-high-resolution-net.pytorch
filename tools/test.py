@@ -82,9 +82,15 @@ def main():
     torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
     torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
 
-    model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
-        cfg, is_train=False
-    )
+    if (cfg.MODEL.NAME == 'faster_vit_4_21k_224'):
+        model = models.create_model(cfg.MODEL.NAME, 
+                                    pretrained=True,
+                                    heatmap_sizes=(90,90),
+                                    model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar")
+    else:
+        model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
+            cfg, is_train=False
+        )
 
     if cfg.TEST.MODEL_FILE:
         logger.info('=> loading model from {}'.format(cfg.TEST.MODEL_FILE))
@@ -97,14 +103,19 @@ def main():
         model.load_state_dict(torch.load(model_state_file))
     
     # SAVE TORCH TRACE SCRIPT -------------------------------
+    model.cuda()
     model.eval()
 
-    input = torch.randn(1,3,256,256)
+    if (cfg.MODEL.NAME == 'faster_vit_4_21k_224'):
+        input = torch.randn(1,3,224,224).cuda()
+        test_input = torch.ones(1,3,224,224).cuda()
+    else:
+        input = torch.randn(1,3,256,256).cuda()
+        test_input = torch.ones(1,3,256,256).cuda()
     trace_v = torch.jit.trace(model, input)
-    trace_v.save("output/unreal/pose_hrnet/w32_256x256_adam_lr1e-3_UnrealFinetune/240604_0807_unreal.pt")
+    trace_v.save("output/unreal/faster_vit_4_21k_224/w32_256x256_adam_lr1e-3_Unreal_04/240604_0806_unreal.pt")
     # with torch.no_grad():
     #     torch.jit.save(trace_v, "/home/inrol/Downloads/trace_Unreal.pt")
-    test_input = torch.ones(1,3,256,256)
     test_output = model(test_input)
     trace_output = trace_v(test_input)
     # print("Compare results:\n",)

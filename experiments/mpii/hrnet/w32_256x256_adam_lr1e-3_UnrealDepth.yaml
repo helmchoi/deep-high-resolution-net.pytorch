@@ -12,12 +12,12 @@ PRINT_FREQ: 100
 
 DATASET:
   COLOR_RGB: false
-  DATASET: unreal
+  DATASET: unrealD
   DATA_FORMAT: png
   FLIP: true
   NUM_JOINTS_HALF_BODY: 8
   PROB_HALF_BODY: -1.0
-  ROOT: '/data/local/HL/HRNet_data/240604_0702_unreal_occvis/'
+  ROOT: '/data/local/HL/HRNet_data/240604-0801_HL_depth_unreal/'
   ROT_FACTOR: 30
   SCALE_FACTOR: 0.25
   SHIFT_FACTOR: 0.5
@@ -25,9 +25,9 @@ DATASET:
   TRAIN_SET: train
 MODEL:
   INIT_WEIGHTS: true
-  NAME: pose_hrnet
+  NAME: posedepth_hrnet
   NUM_JOINTS: 16
-  PRETRAINED: 'models/pytorch/imagenet/hrnet_w32-36af842e.pth'
+  PRETRAINED: 'output/unrealD/posedepth_hrnet/w32_256x256_adam_lr1e-3_UnrealDepth/checkpoint_baseline.pth'
   TARGET_TYPE: gaussian
   IMAGE_SIZE:
   - 256
@@ -36,6 +36,8 @@ MODEL:
   - 64
   - 64
   SIGMA: 2
+  DEPTH_RANGE: 1
+  SIGMA_DEPTH: 1
   EXTRA:
     PRETRAINED_LAYERS:
     - 'conv1'
@@ -95,7 +97,7 @@ TRAIN:
   BATCH_SIZE_PER_GPU: 32
   SHUFFLE: true
   BEGIN_EPOCH: 0
-  END_EPOCH: 500
+  END_EPOCH: 210
   OPTIMIZER: adam
   LR: 0.001
   LR_FACTOR: 0.1
