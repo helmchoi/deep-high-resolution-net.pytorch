@@ -859,6 +859,7 @@ class FasterViT(nn.Module):
                  resolution=224,
                  drop_path_rate=0.2,
                  in_chans=3,
+                 kernel_size=3,
                  heatmap_sizes=(96,96),
                  num_joints=16,
                  qkv_bias=True,
@@ -923,7 +924,7 @@ class FasterViT(nn.Module):
                                    do_propagation=do_propagation)
             self.levels.append(level)
         self.norm = LayerNorm2d(num_features) if layer_norm_last else nn.BatchNorm2d(num_features)
-        self.kernel_size_ = 9
+        self.kernel_size_ = kernel_size
         self.final_conv = nn.Conv2d(in_channels=8,
                                     out_channels=num_joints,
                                     kernel_size=(self.kernel_size_, self.kernel_size_))
@@ -1253,6 +1254,7 @@ def faster_vit_6_224(pretrained=False, **kwargs):
 @register_pip_model
 @register_model
 def faster_vit_4_21k_224(pretrained=False, **kwargs):
+    kernel_size = kwargs.pop("kernel_size", 3)
     heatmap_sizes = kwargs.pop("heatmap_sizes", (96, 96))
     num_joints = kwargs.pop("num_joints", 16)
     depths = kwargs.pop("depths", [3, 3, 12, 5])
@@ -1277,6 +1279,7 @@ def faster_vit_4_21k_224(pretrained=False, **kwargs):
                       in_dim=in_dim,
                       mlp_ratio=mlp_ratio,
                       resolution=resolution,
+                      kernel_size=kernel_size,
                       heatmap_sizes=heatmap_sizes,
                       num_joints=num_joints,
                       drop_path_rate=drop_path_rate,

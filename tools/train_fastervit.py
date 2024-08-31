@@ -33,6 +33,8 @@ from utils.utils import save_checkpoint
 from utils.utils import create_logger
 from utils.utils import get_model_summary
 
+from timm.models import create_model
+
 import dataset
 import models
 import time
@@ -94,10 +96,16 @@ def main():
     print("GPU count: ", torch.cuda.device_count())
     print("GPU name: ", torch.cuda.get_device_name(0))
 
-    model = models.create_model(cfg.MODEL.NAME, 
-                                pretrained=True,
-                                heatmap_sizes=(cfg.MODEL.HEATMAP_SIZE[0], cfg.MODEL.HEATMAP_SIZE[0]),
-                                model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar")
+    # model = models.create_model(cfg.MODEL.NAME, 
+    #                             pretrained=True,
+    #                             heatmap_sizes=(cfg.MODEL.HEATMAP_SIZE[0], cfg.MODEL.HEATMAP_SIZE[0]),
+    #                             model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar")
+    model = create_model(cfg.MODEL.NAME,
+                        pretrained=True,
+                        model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar",
+                        kernel_size=cfg.MODEL.KERNEL_SIZE,
+                        heatmap_sizes=(cfg.MODEL.HEATMAP_SIZE[0], cfg.MODEL.HEATMAP_SIZE[1]),
+                        drop_path_rate=0.2)
 
     # [Time test] =========================================================
     # device = torch.device("cuda")

@@ -18,6 +18,8 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 
+from optimizer import Lamb
+
 
 def create_logger(cfg, cfg_name, phase='train'):
     root_output_dir = Path(cfg.OUTPUT_DIR)
@@ -72,6 +74,10 @@ def get_optimizer(cfg, model):
             model.parameters(),
             lr=cfg.TRAIN.LR
         )
+    elif cfg.TRAIN.OPTIMIZER == 'lamb':
+        optimizer = Lamb(model.parameters(),
+                        lr=cfg.TRAIN.LR,
+                        weight_decay=cfg.TRAIN.WD)
 
     return optimizer
 
