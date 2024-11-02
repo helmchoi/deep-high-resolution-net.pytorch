@@ -10,6 +10,7 @@ from __future__ import print_function
 
 import numpy as np
 import cv2
+from copy import deepcopy
 
 
 def flip_back(output_flipped, matched_parts):
@@ -44,6 +45,22 @@ def fliplr_joints(joints, joints_vis, width, matched_parts):
             joints_vis[pair[1], :], joints_vis[pair[0], :].copy()
 
     return joints*joints_vis, joints_vis
+
+
+def fliplr_just_joints(joints, width, matched_parts):
+    """
+    flip coords
+    """
+    # Flip horizontal
+    joints_ = deepcopy(joints)
+    joints_[:, :, 0] = width - joints[:, :, 0] - 1
+
+    # Change left-right parts
+    for pair in matched_parts:
+        joints_[:, pair[0], :], joints_[:, pair[1], :] = \
+            joints_[:, pair[1], :], joints_[:, pair[0], :].copy()
+
+    return joints_
 
 
 def transform_preds(coords, center, scale, output_size):

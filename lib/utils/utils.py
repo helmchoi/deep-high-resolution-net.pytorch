@@ -78,6 +78,12 @@ def get_optimizer(cfg, model):
         optimizer = Lamb(model.parameters(),
                         lr=cfg.TRAIN.LR,
                         weight_decay=cfg.TRAIN.WD)
+    elif cfg.TRAIN.OPTIMIZER == 'adamw':
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=cfg.TRAIN.LR,
+            weight_decay=cfg.TRAIN.WD
+        )
 
     return optimizer
 

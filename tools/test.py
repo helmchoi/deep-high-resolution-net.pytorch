@@ -28,7 +28,7 @@ import _init_paths
 from config import cfg
 from config import update_config
 from core.loss import JointsMSELoss
-from core.function import validate
+from core.function import validate, validate_TC
 from utils.utils import create_logger
 
 import dataset
@@ -68,35 +68,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def get_engine(onnx_file_path, engine_file_path=""):
-    def build_engine():
-        with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
-            builder.max_workspace_size = 1 << 30 # 1GB
-            builder.max_batch_size = 1
-            if not os.path.exists(onnx_file_path):
-                print('ONNX file {} not found, please run yolov3_to_onnx.py first to generate it.'.format(onnx_file_path))
-                exit(0)
-            print('Loading ONNX file from path {}...'.format(onnx_file_path))
-            with open(onnx_file_path, 'rb') as model:
-                print('Beginning ONNX file parsing')
-                parser.parse(model.read())
-            print('Completed parsing of ONNX file')
-            print('Building an engine from file {}; this may take a while...'.format(onnx_file_path))
-            engine = builder.build_cuda_engine(network)
-            print("Completed creating Engine")
-            
-            with open(engine_file_path, "wb") as f:
-                f.write(engine.serialize())
-            return engine
-
-    if os.path.exists(engine_file_path):
-        # If a serialized engine exists, use it instead of building an engine.
-        print("Reading engine from file {}".format(engine_file_path))
-        with open(engine_file_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
-            return runtime.deserialize_cuda_engine(f.read())
-    else:
-        return build_engine()
-        
 
 def main():
     args = parse_args()
@@ -113,20 +84,16 @@ def main():
     torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
     torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
 
-    if (cfg.MODEL.NAME == 'faster_vit_4_21k_224'):
-        # model = models.create_model(cfg.MODEL.NAME, 
-        #                             pretrained=True,
-        #                             heatmap_sizes=(90,90),
-        #                             model_path="models/pytorch/imagenet/fastervit_4_21k_224_w14.pth.tar")
-        model = create_model(cfg.MODEL.NAME,
-                            pretrained=False,
-                            heatmap_sizes=(90,90),
-                            kernel_size=9,
-                            scriptable=True)
-    else:
-        model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
-            cfg, is_train=False
-        )
+    # if cfg.MODEL.NAME == 'faster_vit_4_21k_224' or cfg.MODEL.NAME == 'faster_vit_0_224':
+    #     model = create_model(cfg.MODEL.NAME,
+    #                         pretrained=False,
+    #                         heatmap_sizes=(54,54),
+    #                         kernel_size=3,
+    #                         scriptable=True)
+    # else:
+    model = eval('models.'+cfg.MODEL.NAME+'.get_pose_net')(
+        cfg, is_train=False
+    )
 
     if cfg.TEST.MODEL_FILE:
         logger.info('=> loading model from {}'.format(cfg.TEST.MODEL_FILE))
@@ -142,32 +109,35 @@ def main():
     model.cuda()
     model.eval()
 
-    if (cfg.MODEL.NAME == 'faster_vit_4_21k_224'):
-        input = torch.randn(1,3,224,224).cuda()
-        test_input = torch.ones(1,3,224,224).cuda()
-    else:
-        input = torch.randn(1,3,256,256).cuda()
-        test_input = torch.ones(1,3,256,256).cuda()
+    # if cfg.MODEL.NAME == 'faster_vit_4_21k_224' or cfg.MODEL.NAME == 'faster_vit_0_224':
+    #     input = torch.randn(1,3,224,224).cuda()
+    #     test_input = torch.ones(1,3,224,224).cuda()
+    # else:
+    input = torch.randn(1,3,256,256).cuda()
+    test_input = torch.ones(1,3,256,256).cuda()
 
-    # torch.onnx.export(model,               # 실행될 모델
-    #                     input,                         # 모델 입력값 (튜플 또는 여러 입력값들도 가능)
-    #                     "dummy.onnx",   # 모델 저장 경로 (파일 또는 파일과 유사한 객체 모두 가능)
-    #                     export_params=True,        # 모델 파일 안에 학습된 모델 가중치를 저장할지의 여부
-    #                     opset_version=11,          # 모델을 변환할 때 사용할 ONNX 버전
-    #                     do_constant_folding=True,  # 최적하시 상수폴딩을 사용할지의 여부
-    #                     input_names = ['input'],   # 모델의 입력값을 가리키는 이름
-    #                     output_names = ['output'], # 모델의 출력값을 가리키는 이름
-    #                     dynamic_axes={'input' : {0 : 'batch_size'},    # 가변적인 길이를 가진 차원
-    #                                     'output' : {0 : 'batch_size'}})
-                                
-    # get_engine("dummy.onnx", engine_file_path="dummy.engine")
+    torch.onnx.export(model,               # 실행될 모델
+                        input,                         # 모델 입력값 (튜플 또는 여러 입력값들도 가능)
+                        "output/unreal/pose_fastvit/w32_256x256_adam_lr1e-3_Unreal/240604_1007_fastvit_unreal_scale.onnx",   # 모델 저장 경로 (파일 또는 파일과 유사한 객체 모두 가능)
+                        export_params=True,        # 모델 파일 안에 학습된 모델 가중치를 저장할지의 여부
+                        opset_version=11,          # 모델을 변환할 때 사용할 ONNX 버전
+                        do_constant_folding=True,  # 최적화시 상수폴딩을 사용할지의 여부
+                        input_names = ['input'],   # 모델의 입력값을 가리키는 이름
+                        output_names = ['output'], # 모델의 출력값을 가리키는 이름
+                        dynamic_axes={'input' : {0 : 'batch_size'},    # 가변적인 길이를 가진 차원
+                                        'output' : {0 : 'batch_size'}})
+
+    input_hm = torch.randn(1,16,64,64).cuda()
 
     trace_v = torch.jit.trace(model, input)
-    trace_v.save("output/unreal/faster_vit_4_21k_224/dummy.pt")
+    # trace_v = torch.jit.trace(model, (input, input_hm))
+    trace_v.save("output/unreal/pose_fastvit/w32_256x256_adam_lr1e-3_Unreal/240604_1007_fastvit_unreal_scale.pt")
     # with torch.no_grad():
     #     torch.jit.save(trace_v, "/home/inrol/Downloads/trace_Unreal.pt")
     test_output = model(test_input)
     trace_output = trace_v(test_input)
+    # test_output, _, _ = model(test_input, input_hm)
+    # trace_output, _, _ = trace_v(test_input, input_hm)
     print("output shape: ", np.shape(test_output), np.shape(trace_output))
     print("model: ", test_output[0,5,35:40,30:35])
     print("trace: ", trace_output[0,5,35:40,30:35])
@@ -202,6 +172,8 @@ def main():
     # evaluate on validation set
     validate(cfg, valid_loader, valid_dataset, model, criterion,
              final_output_dir, tb_log_dir)
+    # validate_TC(cfg, valid_loader, valid_dataset, model, criterion,
+    #          final_output_dir, tb_log_dir)
 
 
 if __name__ == '__main__':

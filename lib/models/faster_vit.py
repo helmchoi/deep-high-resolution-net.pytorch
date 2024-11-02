@@ -190,6 +190,7 @@ def _load_checkpoint(model,
         dict or OrderedDict: The loaded checkpoint.
     """
     checkpoint = torch.load(filename, map_location=map_location)
+    print("=> checkpoint loaded")
     if not isinstance(checkpoint, dict):
         raise RuntimeError(
             f'No state_dict found in checkpoint file {filename}')
@@ -957,11 +958,10 @@ class FasterViT(nn.Module):
         return x
 
     def forward(self, x):
-        # print("input shape: ", np.shape(x))
         x = self.forward_features(x)
         x = torch.reshape(x, (-1, 8, \
                                     self.heatmap_sizes[0] + self.kernel_size_ - 1, \
-                                    self.heatmap_sizes[0] + self.kernel_size_ - 1))    # stride=1
+                                    self.heatmap_sizes[1] + self.kernel_size_ - 1))    # stride=1
         x = self.final_conv(x)
         return x
     
@@ -976,6 +976,9 @@ class FasterViT(nn.Module):
 @register_pip_model
 @register_model
 def faster_vit_0_224(pretrained=False, **kwargs):
+    kernel_size = kwargs.pop("kernel_size", 3)
+    heatmap_sizes = kwargs.pop("heatmap_sizes", (96, 96))
+    num_joints = kwargs.pop("num_joints", 16)
     depths = kwargs.pop("depths", [2, 3, 6, 5])
     num_heads = kwargs.pop("num_heads", [2, 4, 8, 16])
     window_size = kwargs.pop("window_size", [7, 7, 7, 7])
@@ -997,6 +1000,9 @@ def faster_vit_0_224(pretrained=False, **kwargs):
                       in_dim=in_dim,
                       mlp_ratio=mlp_ratio,
                       resolution=resolution,
+                      kernel_size=kernel_size,
+                      heatmap_sizes=heatmap_sizes,
+                      num_joints=num_joints,
                       drop_path_rate=drop_path_rate,
                       hat=hat,
                       **kwargs)
@@ -1006,6 +1012,7 @@ def faster_vit_0_224(pretrained=False, **kwargs):
         if not Path(model_path).is_file():
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
+        print("=> pretrained being loaded...")
         model._load_state_dict(model_path)
     return model
 

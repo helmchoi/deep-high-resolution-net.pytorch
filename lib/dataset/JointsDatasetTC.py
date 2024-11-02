@@ -15,6 +15,7 @@ import random
 import cv2
 import numpy as np
 import torch
+from copy import deepcopy
 from torch.utils.data import Dataset
 
 from utils.transforms import get_affine_transform
@@ -25,7 +26,7 @@ from utils.transforms import fliplr_joints
 logger = logging.getLogger(__name__)
 
 
-class JointsDataset(Dataset):
+class JointsDatasetTC(Dataset):
     def __init__(self, cfg, root, image_set, is_train, transform=None):
         self.num_joints = 0
         self.pixel_std = 200
@@ -53,6 +54,10 @@ class JointsDataset(Dataset):
         self.sigma = cfg.MODEL.SIGMA
         self.use_different_joints_weight = cfg.LOSS.USE_DIFFERENT_JOINTS_WEIGHT
         self.joints_weight = 1
+
+        # [24.08.31] for feedback
+        self.depth_pert = cfg.DATASET.DEPTH_PERT
+        self.uv_pert = cfg.DATASET.UV_PERT
 
         self.transform = transform
         self.db = []
@@ -137,14 +142,13 @@ class JointsDataset(Dataset):
 
         joints = db_rec['joints_3d']
         joints_vis = db_rec['joints_3d_vis']
+        uvd_pert = deepcopy(joints).astype(np.float32)
 
         c = db_rec['center']
         s = db_rec['scale']
         score = db_rec['score'] if 'score' in db_rec else 1
         r = 0
         shift_ = np.array([0, 0], dtype=np.float32)
-        # [24.10.28] scale GT variance ~ scale factor
-        sc_ = 1
 
         if self.is_train:
             if (np.sum(joints_vis[:, 0]) > self.num_joints_half_body
@@ -158,8 +162,7 @@ class JointsDataset(Dataset):
 
             sf = self.scale_factor
             rf = self.rotation_factor
-            sc_ = np.clip(np.random.randn()*sf + 1, np.maximum(1 - sf, 0.1), 1 + sf)
-            s = s * sc_
+            s = s * np.clip(np.random.randn()*sf + 1, 1 - sf, 1 + sf)
             r = np.clip(np.random.randn()*rf, -rf*2, rf*2) \
                 if random.random() <= 0.6 else 0
 
@@ -183,11 +186,21 @@ class JointsDataset(Dataset):
         if self.transform:
             input = self.transform(input)
 
+        # trns_uv_0 = affine_transform(joints[0, 0:2], trans)
+        trns_uv_0 = np.zeros(2)
         for i in range(self.num_joints):
+            trns_uv = affine_transform(joints[i, 0:2], trans)
+            uvd_pert[i, 0:2] = deepcopy(trns_uv) - trns_uv_0 + \
+                                self.uv_pert * np.array([np.random.rand(), np.random.rand()])
+            # uvd_pert[i, 2] += np.random.randn() * self.depth_pert
             if joints_vis[i, 0] > 0.0:
-                joints[i, 0:2] = affine_transform(joints[i, 0:2], trans)
+                joints[i, 0:2] = trns_uv
+        # perturbed_depth = deepcopy(uvd_pert[:, 2])
+        # uvd_pert[:, 2] = (perturbed_depth - np.min(perturbed_depth)) / (np.max(perturbed_depth) - np.min(perturbed_depth))
+        
+        uvd_target, _ = self.generate_target(uvd_pert, np.ones_like(joints_vis))
 
-        target, target_weight = self.generate_target(joints, joints_vis, sc_)
+        target, target_weight = self.generate_target(joints, joints_vis)
 
         target = torch.from_numpy(target)
         target_weight = torch.from_numpy(target_weight)
@@ -204,7 +217,7 @@ class JointsDataset(Dataset):
             'score': score
         }
 
-        return input, target, target_weight, meta
+        return input, uvd_target, target, target_weight, meta
 
     def select_data(self, db):
         db_selected = []
@@ -239,7 +252,7 @@ class JointsDataset(Dataset):
         logger.info('=> num selected db: {}'.format(len(db_selected)))
         return db_selected
 
-    def generate_target(self, joints, joints_vis, sc = 1.0):
+    def generate_target(self, joints, joints_vis):
         '''
         :param joints:  [num_joints, 3]
         :param joints_vis: [num_joints, 3]
@@ -250,9 +263,6 @@ class JointsDataset(Dataset):
         # # [23.12.20] for invisible joints, supervise w/ uniform low prob.
         # target_weight[:, 0] = np.maximum(joints_vis[:, 0], 0.4)
 
-        # [24.10.28] GT variance ~ scale factor
-        sigma_ = self.sigma / sc
-
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
 
@@ -262,8 +272,7 @@ class JointsDataset(Dataset):
                                self.heatmap_size[0]),
                               dtype=np.float32)
 
-            # tmp_size = self.sigma * 3
-            tmp_size = sigma_ * 3
+            tmp_size = self.sigma * 3
 
             for joint_id in range(self.num_joints):
                 feat_stride = self.image_size / self.heatmap_size
@@ -285,12 +294,8 @@ class JointsDataset(Dataset):
                 x = np.arange(0, size, 1, np.float32)
                 y = x[:, np.newaxis]
                 x0 = y0 = size // 2
-                # [24.10.28] GT mean correction considering pixel precision
-                x0 += joints[joint_id][0] / feat_stride[0] - mu_x
-                y0 += joints[joint_id][1] / feat_stride[1] - mu_y
                 # The gaussian is not normalized, we want the center value to equal 1
-                # g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
-                g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma_ ** 2))
+                g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
 
                 # Usable gaussian range
                 g_x = max(0, -ul[0]), min(br[0], self.heatmap_size[0]) - ul[0]

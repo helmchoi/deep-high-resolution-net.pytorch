@@ -16,3 +16,5 @@ import models.pose_resnet
 import models.pose_hrnet
 import models.faster_vit
 from .registry import create_model
+import models.poseTC_hrnet
+import models.pose_fastvit

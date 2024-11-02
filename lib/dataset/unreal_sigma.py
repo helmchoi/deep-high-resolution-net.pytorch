@@ -17,13 +17,13 @@ from copy import deepcopy
 import numpy as np
 from scipy.io import loadmat, savemat
 
-from dataset.JointsDataset import JointsDataset
+from dataset.JointsSigmaDataset import JointsSigmaDataset
 
 
 logger = logging.getLogger(__name__)
 
 
-class UNRLDataset(JointsDataset):
+class UNRLSDataset(JointsSigmaDataset):
     def __init__(self, cfg, root, image_set, is_train, transform=None):
         super().__init__(cfg, root, image_set, is_train, transform)
 
@@ -68,6 +68,8 @@ class UNRLDataset(JointsDataset):
 
             joints_3d = np.zeros((self.num_joints, 3), dtype=np.float)
             joints_3d_vis = np.zeros((self.num_joints,  3), dtype=np.float)
+            cvalue = np.zeros((self.num_joints), dtype=np.float)
+            sigma = np.zeros((self.num_joints), dtype=np.float)
             if self.image_set != 'test':
                 joints = np.array(a['joints'])
                 joints[:, 0:2] = joints[:, 0:2] - 1
@@ -79,6 +81,8 @@ class UNRLDataset(JointsDataset):
                 joints_3d[:, 0:2] = joints[:, 0:2]
                 joints_3d_vis[:, 0] = joints_vis[:]
                 joints_3d_vis[:, 1] = joints_vis[:]
+                cvalue = np.array(a['cvalue'])
+                sigma = np.array(a['sigma'])
 
             image_dir = 'images.zip@' if self.data_format == 'zip' else 'images'
             gt_db.append(
@@ -90,6 +94,8 @@ class UNRLDataset(JointsDataset):
                     'joints_3d_vis': joints_3d_vis,
                     'filename': '',
                     'imgnum': 0,
+                    'cvalue': cvalue,
+                    'sigma': sigma,
                 }
             )
 
@@ -105,14 +111,6 @@ class UNRLDataset(JointsDataset):
 
         if 'test' in cfg.DATASET.TEST_SET:
             return {'Null': 0.0}, 0.0
-
-        # gt_file = os.path.join(cfg.DATASET.ROOT,
-        #                        'annot',
-        #                        'gt_{}.mat'.format(cfg.DATASET.TEST_SET))
-        # gt_dict = loadmat(gt_file)
-        # jnt_missing = gt_dict['jnt_missing'].reshape((self.num_joints,-1))
-        # pos_gt_src = gt_dict['pos_gt_src'].reshape((self.num_joints,2,-1))
-        # bbox_src = gt_dict['bbox_src'].reshape((2,2,-1))
 
         file_name = os.path.join(
             self.root, 'annot', cfg.DATASET.TEST_SET + '.json'

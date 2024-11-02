@@ -14,3 +14,5 @@ from .test import TESTDataset as test
 from .unreal import UNRLDataset as unreal
 from .vist import VISTDataset as vist
 from .unreal_depth import UNRLDepthDataset as unrealD
+from .unreal_TC import UNRLTCDataset as unrealTC
+from .unreal_sigma import UNRLSDataset as unrealS

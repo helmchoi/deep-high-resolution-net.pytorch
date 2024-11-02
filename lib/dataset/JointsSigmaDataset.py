@@ -25,7 +25,7 @@ from utils.transforms import fliplr_joints
 logger = logging.getLogger(__name__)
 
 
-class JointsDataset(Dataset):
+class JointsSigmaDataset(Dataset):
     def __init__(self, cfg, root, image_set, is_train, transform=None):
         self.num_joints = 0
         self.pixel_std = 200
@@ -143,8 +143,6 @@ class JointsDataset(Dataset):
         score = db_rec['score'] if 'score' in db_rec else 1
         r = 0
         shift_ = np.array([0, 0], dtype=np.float32)
-        # [24.10.28] scale GT variance ~ scale factor
-        sc_ = 1
 
         if self.is_train:
             if (np.sum(joints_vis[:, 0]) > self.num_joints_half_body
@@ -158,8 +156,7 @@ class JointsDataset(Dataset):
 
             sf = self.scale_factor
             rf = self.rotation_factor
-            sc_ = np.clip(np.random.randn()*sf + 1, np.maximum(1 - sf, 0.1), 1 + sf)
-            s = s * sc_
+            s = s * np.clip(np.random.randn()*sf + 1, 1 - sf, 1 + sf)
             r = np.clip(np.random.randn()*rf, -rf*2, rf*2) \
                 if random.random() <= 0.6 else 0
 
@@ -187,7 +184,9 @@ class JointsDataset(Dataset):
             if joints_vis[i, 0] > 0.0:
                 joints[i, 0:2] = affine_transform(joints[i, 0:2], trans)
 
-        target, target_weight = self.generate_target(joints, joints_vis, sc_)
+        cval = db_rec['cvalue']
+        sigma = db_rec['sigma']
+        target, target_weight = self.generate_target(joints, joints_vis, cval, sigma)
 
         target = torch.from_numpy(target)
         target_weight = torch.from_numpy(target_weight)
@@ -239,7 +238,7 @@ class JointsDataset(Dataset):
         logger.info('=> num selected db: {}'.format(len(db_selected)))
         return db_selected
 
-    def generate_target(self, joints, joints_vis, sc = 1.0):
+    def generate_target(self, joints, joints_vis, cvalue, sigma):
         '''
         :param joints:  [num_joints, 3]
         :param joints_vis: [num_joints, 3]
@@ -249,9 +248,6 @@ class JointsDataset(Dataset):
         target_weight[:, 0] = joints_vis[:, 0]
         # # [23.12.20] for invisible joints, supervise w/ uniform low prob.
         # target_weight[:, 0] = np.maximum(joints_vis[:, 0], 0.4)
-
-        # [24.10.28] GT variance ~ scale factor
-        sigma_ = self.sigma / sc
 
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
@@ -263,12 +259,13 @@ class JointsDataset(Dataset):
                               dtype=np.float32)
 
             # tmp_size = self.sigma * 3
-            tmp_size = sigma_ * 3
 
             for joint_id in range(self.num_joints):
                 feat_stride = self.image_size / self.heatmap_size
                 mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)
                 mu_y = int(joints[joint_id][1] / feat_stride[1] + 0.5)
+                tmp_size = np.maximum(np.maximum(mu_x, self.heatmap_size[1] - mu_x), \
+                                    np.maximum(mu_y, self.heatmap_size[0] - mu_y))
                 # Check that any part of the gaussian is in-bounds
                 ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
                 br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
@@ -285,12 +282,9 @@ class JointsDataset(Dataset):
                 x = np.arange(0, size, 1, np.float32)
                 y = x[:, np.newaxis]
                 x0 = y0 = size // 2
-                # [24.10.28] GT mean correction considering pixel precision
-                x0 += joints[joint_id][0] / feat_stride[0] - mu_x
-                y0 += joints[joint_id][1] / feat_stride[1] - mu_y
                 # The gaussian is not normalized, we want the center value to equal 1
-                # g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
-                g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma_ ** 2))
+                g = cvalue[joint_id] * np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma[joint_id] ** 2))
+                # g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma[joint_id] ** 2))
 
                 # Usable gaussian range
                 g_x = max(0, -ul[0]), min(br[0], self.heatmap_size[0]) - ul[0]

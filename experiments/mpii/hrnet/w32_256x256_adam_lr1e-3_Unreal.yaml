@@ -14,10 +14,10 @@ DATASET:
   COLOR_RGB: false
   DATASET: unreal
   DATA_FORMAT: png
-  FLIP: true
+  FLIP: false
   NUM_JOINTS_HALF_BODY: 8
   PROB_HALF_BODY: -1.0
-  ROOT: '/data/local/HL/HRNet_data/240710_0805_Unreal/'
+  ROOT: '/data/local/HL/HRNet_data/240604_0806_unreal/'
   ROT_FACTOR: 30
   SCALE_FACTOR: 0.25
   SHIFT_FACTOR: 0.5
@@ -110,7 +110,7 @@ TRAIN:
 TEST:
   BATCH_SIZE_PER_GPU: 32
   MODEL_FILE: ''
-  FLIP_TEST: true
+  FLIP_TEST: false
   POST_PROCESS: true
   SHIFT_HEATMAP: true
 DEBUG:

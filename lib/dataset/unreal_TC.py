@@ -17,19 +17,19 @@ from copy import deepcopy
 import numpy as np
 from scipy.io import loadmat, savemat
 
-from dataset.JointsDataset import JointsDataset
+from dataset.JointsDatasetTC import JointsDatasetTC
 
 
 logger = logging.getLogger(__name__)
 
 
-class UNRLDataset(JointsDataset):
+class UNRLTCDataset(JointsDatasetTC):
     def __init__(self, cfg, root, image_set, is_train, transform=None):
         super().__init__(cfg, root, image_set, is_train, transform)
 
-        self.num_joints = cfg.MODEL.NUM_JOINTS
+        self.num_joints = 16
         self.flip_pairs = []
-        # self.parent_ids = [0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        self.parent_ids = [0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
         self.upper_body_ids = (7, 8, 9, 10, 11, 12, 13, 14, 15)
         self.lower_body_ids = (0, 1, 2, 3, 4, 5, 6)
@@ -77,6 +77,7 @@ class UNRLDataset(JointsDataset):
                                                       self.num_joints)
 
                 joints_3d[:, 0:2] = joints[:, 0:2]
+                # joints_3d[:, 2] = joints[:, 2]  # depth
                 joints_3d_vis[:, 0] = joints_vis[:]
                 joints_3d_vis[:, 1] = joints_vis[:]
 
@@ -126,7 +127,7 @@ class UNRLDataset(JointsDataset):
         scale = np.ones((self.num_joints, len_anno))
         for idx, a in enumerate(anno):
             jnt_visible[:, idx] = np.array(a['joints_vis'])
-            pos_gt_src[:, :, idx] = np.array(a['joints'])
+            pos_gt_src[:, :, idx] = np.array(a['joints'])[:,:2]
             scale[:, idx] = a['scale'] * 200.0 / 10.0
 
         pos_pred_src = np.transpose(preds, [1, 2, 0])

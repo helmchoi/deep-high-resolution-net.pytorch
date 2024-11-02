@@ -26,8 +26,8 @@ import _init_paths
 from config import cfg
 from config import update_config
 from core.loss import JointsMSELoss
-from core.function import train
-from core.function import validate
+from core.function import train_TC
+from core.function import validate_TC
 from utils.utils import get_optimizer
 from utils.utils import save_checkpoint
 from utils.utils import create_logger
@@ -112,9 +112,12 @@ def main():
     dump_input = torch.rand(
         (1, 3, cfg.MODEL.IMAGE_SIZE[1], cfg.MODEL.IMAGE_SIZE[0])
     )
+    dump_uvd = torch.rand(
+        (1, cfg.MODEL.NUM_JOINTS, 3)
+    )
     # writer_dict['writer'].add_graph(model, (dump_input, ))    # this is disabled because of error it causes [23.09.18]
 
-    logger.info(get_model_summary(model, dump_input))
+    # logger.info(get_model_summary(model, (dump_input, dump_uvd)))     # printing model summary disabled
 
     model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
 
@@ -170,7 +173,7 @@ def main():
         logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
         checkpoint = torch.load(checkpoint_file)
         begin_epoch = checkpoint['epoch']
-        # best_perf = checkpoint['perf']
+        best_perf = checkpoint['perf']
         last_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
 
@@ -187,12 +190,12 @@ def main():
         lr_scheduler.step()
 
         # train for one epoch
-        train(cfg, train_loader, model, criterion, optimizer, epoch,
+        train_TC(cfg, train_loader, model, criterion, optimizer, epoch,
               final_output_dir, tb_log_dir, writer_dict)
 
 
         # evaluate on validation set
-        perf_indicator = validate(
+        perf_indicator = validate_TC(
             cfg, valid_loader, valid_dataset, model, criterion,
             final_output_dir, tb_log_dir, writer_dict
         )
